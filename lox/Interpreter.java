@@ -1,11 +1,19 @@
 package lox;
 
-public class Interpreter implements Expr.Visitor<Object> {
+import java.util.List;
 
-    void interpret(Expr expression) {
+import lox.Expr.Assign;
+import lox.Expr.Variable;
+
+public class Interpreter implements Expr.Visitor<Object>,
+        Stmt.Visitor<Void> {
+    private Environment environment = new Environment();
+
+    void interpret(List<Stmt> statements) {
         try {
-            Object value = evaluate(expression);
-            System.out.println(stringify(value));
+            for (Stmt statement : statements) {
+                execute(statement);
+            }
         } catch (RuntimeError e) {
             Lox.runtimeError(e);
         }
@@ -25,6 +33,41 @@ public class Interpreter implements Expr.Visitor<Object> {
         return expr.accept(this);
     }
 
+    private void execute(Stmt stmt) {
+        stmt.accept(this);
+    }
+
+    @Override
+    public Void visitExpressionStmt(Stmt.Expression stmt) {
+        evaluate(stmt.expression);
+        return null;
+    }
+
+    @Override
+    public Void visitPrintStmt(Stmt.Print stmt) {
+        Object value = evaluate(stmt.expression);
+        System.out.println(stringify(value));
+        return null;
+    }
+
+    @Override
+    public Void visitVarStmt(Stmt.Var stmt) {
+        Object value = null;
+        if (stmt.initializer != null) {
+            value = evaluate(stmt.initializer);
+        }
+
+        environment.define(stmt.name.lexeme, value);
+        return null;
+    }
+
+    @Override
+    public Object visitAssignExpr(Assign expr) {
+        Object value = evaluate(expr.value);
+        environment.assign(expr.name, value);
+        return value;
+    }
+
     @Override
     public Object visitUnaryExpr(Expr.Unary expr) {
         Object right = evaluate(expr.right);
@@ -41,6 +84,11 @@ public class Interpreter implements Expr.Visitor<Object> {
         return null;
     }
 
+    @Override
+    public Object visitVariableExpr(Expr.Variable expr) {
+        return environment.get(expr.name);
+    }
+
     private void checkNumberOperand(Token operator, Object operand) {
         if (operand instanceof Double) {
             return;
@@ -49,8 +97,9 @@ public class Interpreter implements Expr.Visitor<Object> {
     }
 
     private void checkNumberOperands(Token operator, Object left, Object right) {
-        if (left instanceof Double && right instanceof Double) return;
-    
+        if (left instanceof Double && right instanceof Double)
+            return;
+
         throw new RuntimeError(operator, "Operands must be numbers.");
     }
 
@@ -72,12 +121,13 @@ public class Interpreter implements Expr.Visitor<Object> {
     }
 
     private String stringify(Object object) {
-        if (object==null) return "nil";
+        if (object == null)
+            return "nil";
 
         if (object instanceof Double) {
             String text = object.toString();
             if (text.endsWith(".0")) {
-                text.substring(0, text.length()-2);
+                text.substring(0, text.length() - 2);
             }
             return text;
         }
@@ -114,7 +164,7 @@ public class Interpreter implements Expr.Visitor<Object> {
                 return (double) left - (double) right;
             case PLUS:
                 if (left instanceof Double && right instanceof Double) {
-                    return (double) right + (double) right;
+                    return (double) left + (double) right;
                 }
 
                 if (left instanceof String && right instanceof String) {
